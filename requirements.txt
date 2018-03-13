@@ -1,0 +1,6 @@
+django>=1.10
+
+bumpversion
+
+pytest
+pytest-django
