@@ -1,3 +1,4 @@
+from datetime import timedelta
 import os
 
 import pytest
@@ -58,4 +59,41 @@ def settings__unsign_middleware__with_max_age(settings):
         'SECRET': 'secret',
         'MAX_AGE': 5
     }
+    return settings
+
+
+@pytest.fixture(scope='function')
+def settings__sign_middleware__01(settings):
+    settings.MIDDLEWARE = [
+        'django_secure_signature.middleware.UnsignMiddleware',
+    ]
+    settings.DJANGO_SECURE_SIGNATURE = [
+        {
+            'HEADER': 'X-Data-Signed-1',
+
+            'SALT': 'salt-node-1',
+            'SECRET': 'secret-node-1',
+
+            'MAX_AGE': timedelta(seconds=60),
+            'DATA': lambda request, *args, **kwargs: {'test': 'test'}
+        },
+        {
+            'HEADER': 'X-Data-Signed-2',
+
+            'SALT': 'salt-node-2',
+            'SECRET': 'secret-node-2',
+
+            'MAX_AGE': timedelta(seconds=60),
+            'DATA': {'test': 'test'}
+        },
+        {
+            'HEADER': 'X-Data-Signed-3',
+
+            'SALT': 'salt-node-3',
+            'SECRET': 'secret-node-3',
+
+            'DATA': 'common.utils.get_data_for_signature'
+        },
+    ]
+
     return settings

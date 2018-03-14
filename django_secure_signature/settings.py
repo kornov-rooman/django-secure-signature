@@ -1,92 +1,153 @@
-from django.conf import settings as dj_settings
-from django.test.signals import setting_changed
-
 """
-# TODO:
+DJANGO_SECURE_SIGNATURE = {
+    'SALT': 'some-salt',
+    'SECRET': 'some-secret',
 
-SECURE_SIGNED = [
+    'DATA': {'test': 'test'},
+}
+
+OR
+
+DJANGO_SECURE_SIGNATURE = [
     {
-        'HEADER': 'x-application-signed-data',
-        'SECRET': 'some-secret',
-        'SALT': 'some-salt',
-        'TARGET': 'varname' or (lambda request, data: request)
-        'SILENT': True,
+        'SIGNATURE_ID': '1',  # TODO: looks redundant
+
+        'HEADER': 'X-Data-Signed-1',
+
+        'SALT': 'salt-1',
+        'SECRET': 'secret-1',
+
+        'DATA': lambda request, *args, **kwargs: {'test': 'test'}
+        'MAX_AGE': timedelta(seconds=60),
+    },
+    {
+        'SIGNATURE_ID': '2',  # TODO: looks redundant
+
+        'HEADER': 'X-Data-Signed-2',
+
+        'SALT': 'salt-node-2',
+        'SECRET': 'secret-node-2',
+
+        'DATA': {'test': 'test'}
+    },
+    {
+        'SIGNATURE_ID': '3',  # TODO: looks redundant
+
+        'HEADER': 'X-Data-Signed-3',
+
+        'SALT': 'salt-3',
+        'SECRET': 'secret-3',
+
+        'DATA': 'common.utils.get_data_for_signature'
     },
 ]
 """
+from importlib import import_module
+import typing as t
+
+from django.conf import settings as dj_settings
+from django.test.signals import setting_changed
+
+APP_SETTINGS = {
+    'SIGNATURE_ID',
+    'HEADER',
+    'meta_formatted_header',
+    'SALT',  # mandatory
+    'SECRET',  # mandatory
+    'DATA',  # mandatory
+    'data',
+    'MAX_AGE',
+}
+CALCULATING_SETTINGS = {
+    'meta_formatted_header',
+    'data',
+}
+DEFAULT_SETTINGS = {
+    'SIGNATURE_ID': '0',
+    'HEADER': 'X-Data-Signed',
+    'MAX_AGE': None,
+}
 
 
 class Settings:
-    """
-    DJANGO_SECURE_SIGNATURE = {
-        'SALT': 'salt',
-        'SECRET': 'secret',
-        'HEADER': 'X-Data-Signed',
-        'MAX_AGE': timedelta(days=1),
-        'TARGET': lambda request, *args, *kwargs: {'test': 'test'}
-    }
-    """
-    def __init__(self):
-        self.attrs = {'SALT', 'SECRET', 'HEADER', 'MAX_AGE', 'TARGET', 'META_FORMATTED_HEADER', 'SHOULD_SIGN_DATA'}
-        self.mandatory_attrs = {'SALT', 'SECRET'}
+    def __init__(self, defined_settings: t.Optional[dict]=None):
+        if defined_settings:
+            self._defined_settings = defined_settings
 
-        self.defaults = {
-            # SEE: https://tools.ietf.org/html/rfc6648
-            'HEADER': 'X-Data-Signed',
-            'MAX_AGE': None,
-            'TARGET': None,
-        }
+        self._memorized = set()
 
-        self._cached_attrs = set()
+        self.app_settings = APP_SETTINGS
+        self.calculating = CALCULATING_SETTINGS
+        self.defaults = DEFAULT_SETTINGS
 
-    def __getattr__(self, attr):
-        if attr not in self.attrs:
+    def __getattr__(self, attr: str) -> t.Any:
+        if attr not in self.app_settings:
             raise AttributeError(f'Invalid setting: {attr}')
 
-        # TODO: hardcoded
-        if attr == 'META_FORMATTED_HEADER':
-            header = self.HEADER
-            val = f'HTTP_{header.upper().replace("-", "_")}'
-        elif attr == 'SHOULD_SIGN_DATA':
-            val = callable(self.TARGET)
-        else:
-            try:
-                val = self.user_settings[attr]
-            except KeyError:
-                if attr in self.mandatory_attrs:
-                    raise AttributeError(f'Mandatory setting\'s key: {attr}')
-                val = self.defaults[attr]
+        if attr in self.calculating:
+            val = self.calculate(attr)
 
-        self._cached_attrs.add(attr)
-        setattr(self, attr, val)
+            self.memorize(attr, val)
+            return val
+
+        try:
+            val = self.defined_settings[attr]
+        except KeyError:
+            val = self.defaults[attr]
+
+        self.memorize(attr, val)
         return val
 
-    # noinspection PyAttributeOutsideInit
     @property
-    def user_settings(self):
-        if not hasattr(self, '_user_settings'):
-            self._user_settings = getattr(dj_settings, 'DJANGO_SECURE_SIGNATURE', {})
-        return self._user_settings
+    def defined_settings(self):
+        if not hasattr(self, '_defined_settings'):
+            defined_settings = getattr(dj_settings, 'DJANGO_SECURE_SIGNATURE', {})
+            setattr(self, '_defined_settings', defined_settings)
 
-    def reload(self):
-        for attr in self._cached_attrs:
+        return getattr(self, '_defined_settings')
+
+    def calculate(self, attr: str) -> t.Any:
+        if attr == 'meta_formatted_header':
+            return self.get_meta_formatted_header(self.HEADER)
+
+        if attr == 'data':
+            if callable(self.DATA):
+                return self.DATA
+            elif isinstance(self.DATA, str):
+                return import_module(attr)
+            else:
+                return self.DATA
+
+        assert False
+
+    @staticmethod
+    def get_meta_formatted_header(header: str) -> str:
+        header = header.upper()
+        header = header.replace('-', '_')
+
+        return f'HTTP_{header}'
+
+    def memorize(self, attr: str, val: t.Any):
+        self._memorized.add(attr)
+        setattr(self, attr, val)
+
+    def forget(self):
+        for attr in self._memorized:
             delattr(self, attr)
 
-        self._cached_attrs.clear()
+        self._memorized.clear()
 
-        if hasattr(self, '_user_settings'):
-            delattr(self, '_user_settings')
+        if hasattr(self, '_defined_settings'):
+            delattr(self, '_defined_settings')
 
 
 settings = Settings()
 
 
 # noinspection PyUnusedLocal
-def reload_settings(*args, **kwargs):
-    setting = kwargs['setting']
-
-    if setting == 'DJANGO_SECURE_SIGNATURE':
-        settings.reload()
+def drop_settings(*args, **kwargs):
+    if kwargs['setting'] == 'DJANGO_SECURE_SIGNATURE':
+        settings.forget()
 
 
-setting_changed.connect(reload_settings)
+setting_changed.connect(drop_settings)
