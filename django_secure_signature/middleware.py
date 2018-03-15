@@ -38,6 +38,9 @@ class SignMiddleware:
     def add_response_headers(self, request, response):
         secure_signed_headers = getattr(request, self.request_attr, None)
 
+        if secure_signed_headers is None:
+            return
+
         for header, signature in secure_signed_headers.items():
             response[header] = signature
 

@@ -25,6 +25,21 @@ def settings_single_signature__sign(settings):
 
 
 @pytest.fixture
+def settings_single_signature__sign__data_is_none(settings):
+    settings.MIDDLEWARE = [
+        'django_secure_signature.middleware.SignMiddleware',
+    ]
+    settings.DJANGO_SECURE_SIGNATURE = [{
+        'HEADER': 'X-Data-Secure-Signed',
+        'SALT': 'salt',
+        'SECRET': 'secret',
+        'DATA_GENERATOR': None
+    }]
+
+    return settings
+
+
+@pytest.fixture
 def settings_single_signature__unsign(settings):
     settings.MIDDLEWARE = [
         'django_secure_signature.middleware.UnsignMiddleware',
@@ -55,7 +70,7 @@ def settings_single_signature__unsign__with_max_age(settings):
     return settings
 
 
-# noinspection PyUnusedLocal
+# noinspection PyUnusedLocal,PyShadowingNames
 def test_can_sign_data(client, settings_single_signature__sign):
     url = reverse('index1')
     response = client.get(url)
@@ -68,7 +83,16 @@ def test_can_sign_data(client, settings_single_signature__sign):
     assert response['X-Data-Secure-Signed'] == data['X-Data-Secure-Signed']
 
 
-# noinspection PyUnusedLocal
+# noinspection PyUnusedLocal,PyShadowingNames
+def test_signing_of_empty_data_wont_coz_fail(client, settings_single_signature__sign__data_is_none):
+    url = reverse('index0')
+    response = client.get(url)
+
+    assert response.status_code == 200
+    assert not response.has_header('X-Data-Secure-Signed')
+
+
+# noinspection PyUnusedLocal,PyShadowingNames
 def test_can_confirm_data(client, settings_single_signature__unsign):
     url = reverse('index2')
     response = client.get(url, HTTP_X_UNSIGN_ONLY=SIGNATURE)
@@ -80,7 +104,7 @@ def test_can_confirm_data(client, settings_single_signature__unsign):
     assert data[0] == DATA
 
 
-# noinspection PyUnusedLocal
+# noinspection PyUnusedLocal,PyShadowingNames
 def test_signature_does_not_match(client, settings_single_signature__unsign):
     url = reverse('index2')
     response = client.get(url, HTTP_X_UNSIGN_ONLY=COMPROMISED_SIGNATURE)
@@ -88,7 +112,7 @@ def test_signature_does_not_match(client, settings_single_signature__unsign):
     assert response.status_code == 403
 
 
-# noinspection PyUnusedLocal
+# noinspection PyUnusedLocal,PyShadowingNames
 def test_signature_expired(client, settings_single_signature__unsign__with_max_age):
     url = reverse('index2')
     response = client.get(url, HTTP_X_SIGNED_PERISHABLE=SIGNATURE)
