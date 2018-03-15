@@ -1,16 +1,16 @@
-from importlib import import_module
 import typing as t
 
 from django.conf import settings as dj_settings
+from django.core.exceptions import ImproperlyConfigured
+
+from .utils import import_from_string, transform_header_to_django_meta_format
 
 AVAILABLE_SETTINGS = {
     # optional:
-    'SENDER',
-    'RECIPIENT',
-    'HEADER',
     'MAX_AGE',
 
     # mandatory:
+    'HEADER',
     'SECRET',
     'SALT',
     'DATA_GENERATOR',
@@ -20,9 +20,6 @@ AVAILABLE_SETTINGS = {
     'get_data',
 }
 DEFAULT_SETTINGS = {
-    'SENDER': None,
-    'RECIPIENT': None,
-    'HEADER': 'X-Data-Secure-Signed',
     'MAX_AGE': None,
 }
 CALCULATING_SETTINGS = {
@@ -59,24 +56,17 @@ class ItemSettings:
 
     def calculate(self, attr: str) -> t.Any:
         if attr == 'meta_formatted_header':
-            return self.get_meta_formatted_header(self.HEADER)
+            return transform_header_to_django_meta_format(self.HEADER)
 
         if attr == 'get_data':
             if callable(self.DATA_GENERATOR):
                 return self.DATA_GENERATOR
             elif isinstance(self.DATA_GENERATOR, str):
-                return import_module(attr)
+                return import_from_string(self.DATA_GENERATOR, 'DATA_GENERATOR')
             else:
                 return lambda *args, **kwargs: self.DATA_GENERATOR
 
         assert False
-
-    @staticmethod
-    def get_meta_formatted_header(header: str) -> str:
-        header = header.upper()
-        header = header.replace('-', '_')
-
-        return f'HTTP_{header}'
 
     def memorize(self, attr: str, val: t.Any):  # in order to readability: explicit method definition
         setattr(self, attr, val)
@@ -90,16 +80,12 @@ class Settings:  # iterable settings
     def __iter__(self):  # proxy
         return self._settings.__iter__()
 
-    def checks(self):  # TODO: ?
-        """
-        Warns a user if there's some validation errors.
-
-            1. all headers must be unique
-        """
-        pass
-
-    def reread_settings(self, app_settings: t.Optional[dict] = None):
+    def reread_settings(self, app_settings: t.Optional[list] = None):
         if not app_settings:
-            app_settings = getattr(dj_settings, 'DJANGO_SECURE_SIGNATURE')
+            app_settings = getattr(dj_settings, 'DJANGO_SECURE_SIGNATURE', [])
+
+        if not (isinstance(app_settings, list) or isinstance(app_settings, tuple)):
+            msg = f'DJANGO_SECURE_SIGNATURE must be either a list or tuple, not {type(app_settings)}!'
+            raise ImproperlyConfigured(msg)
 
         self._settings = [ItemSettings(item) for item in app_settings]

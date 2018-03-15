@@ -18,14 +18,8 @@ class SignMiddleware:
 
     def patch_request_with_signed_data(self, request):
         secure_signed_headers = {}
-        referer = request.META.get('HTTP_REFERER')
 
         for signature_settings in settings:
-            if signature_settings.RECIPIENT and not referer.startswith(signature_settings.RECIPIENT):
-                # skip generation of the signature if a user defined RECIPIENT (service-recipient)
-                # and request was made from a different service
-                continue
-
             data = signature_settings.get_data(request)
             if data is None:
                 continue
@@ -35,10 +29,8 @@ class SignMiddleware:
                 'salt': signature_settings.SALT,
             }
 
-            dumped = signing.dumps(data, **secrets)
-            timestamped = signing.TimestampSigner(**secrets).sign(dumped)
-
-            secure_signed_headers[signature_settings.HEADER] = timestamped
+            signature = signing.dumps(data, **secrets)
+            secure_signed_headers[signature_settings.HEADER] = signature
 
         if secure_signed_headers:
             setattr(request, self.request_attr, secure_signed_headers)
@@ -66,17 +58,11 @@ class UnsignMiddleware:
         return self.get_response(request)
 
     def patch_request_with_confirmed_signed_data(self, request):
-        confirmed_signed_data = []
-        referer = request.META.get('HTTP_REFERER')
+        confirmed_data = []
 
         for signature_settings in settings:
-            if signature_settings.SENDER and not referer.startswith(signature_settings.SENDER):
-                # skip verification of the signature if a user defined SENDER (service-sender)
-                # and request was made from a different service
-                continue
-
-            value = request.META.get(signature_settings.meta_formatted_header, None)
-            if value is None:
+            signature = request.META.get(signature_settings.meta_formatted_header, None)
+            if signature is None:
                 continue
 
             secrets = {
@@ -84,7 +70,8 @@ class UnsignMiddleware:
                 'salt': signature_settings.SALT,
             }
 
-            fresh_data = signing.TimestampSigner(**secrets).unsign(value, max_age=signature_settings.MAX_AGE)
-            confirmed_signed_data.append(signing.loads(fresh_data, **secrets))
+            data = signing.loads(signature, **secrets, max_age=signature_settings.MAX_AGE)
+            confirmed_data.append(data)
 
-        setattr(request, self.request_attr, confirmed_signed_data)
+        if confirmed_data:
+            setattr(request, self.request_attr, confirmed_data)

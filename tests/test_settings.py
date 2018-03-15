@@ -8,14 +8,13 @@ pytestmark = [pytest.mark.unit, pytest.mark.settings]
 
 def test_item_settings__with_defaults():
     defined = {
+        'HEADER': 'X-Data-Secure-Signed',
         'SECRET': 'secret',
         'SALT': 'salt',
         'DATA_GENERATOR': {'test': 'test'}
     }
     settings = ItemSettings(defined)
 
-    assert settings.SENDER is None
-    assert settings.RECIPIENT is None
     assert settings.HEADER == 'X-Data-Secure-Signed'
     assert settings.MAX_AGE is None
 
@@ -29,8 +28,6 @@ def test_item_settings__with_defaults():
 
 def test_item_settings():
     defined = {
-        'SENDER': 'http://sender',
-        'RECIPIENT': 'http://recipient',
         'HEADER': 'X-Test',
         'MAX_AGE': 3600,
         'SECRET': 'secret-1',
@@ -39,8 +36,6 @@ def test_item_settings():
     }
     settings = ItemSettings(defined)
 
-    assert settings.SENDER == 'http://sender'
-    assert settings.RECIPIENT == 'http://recipient'
     assert settings.HEADER == 'X-Test'
     assert settings.MAX_AGE == 3600
 
@@ -56,10 +51,43 @@ def test_item_settings__fail():
     settings = ItemSettings({})
 
     with pytest.raises(KeyError):
-        assert settings.SALT
+        assert settings.HEADER
 
     with pytest.raises(KeyError):
         assert settings.SECRET
 
     with pytest.raises(KeyError):
+        assert settings.SALT
+
+    with pytest.raises(KeyError):
         assert settings.DATA_GENERATOR
+
+
+def test_item_settings__data_generator():
+    # 1. python path
+    settings = ItemSettings({
+        'DATA_GENERATOR': 'tests.django_app.custom_data_generator'
+    })
+
+    assert settings.get_data() == 'test'
+
+    # 2. callable
+    settings = ItemSettings({
+        'DATA_GENERATOR': lambda: 'test2'
+    })
+
+    assert settings.get_data() == 'test2'
+
+    # 3. some data
+    settings = ItemSettings({
+        'DATA_GENERATOR': [1, 2, 3]
+    })
+
+    assert settings.get_data() == [1, 2, 3]
+
+    # 4. just None
+    settings = ItemSettings({
+        'DATA_GENERATOR': None
+    })
+
+    assert settings.get_data() is None

@@ -5,8 +5,8 @@ from django.urls import reverse
 pytestmark = pytest.mark.middleware
 
 DATA = {'uid': 5432}
-SIGNATURE = 'eyJ1aWQiOjU0MzJ9:1evlue:XhyDA7Z6e7nTOD0jpIZH_lB8_LQ:1evlue:TJV81AtFxFiDdUm2HYYgIQv6NKs'
-COMPROMISED_SIGNATURE = '1eyJ1aWQiOjU0MzJ9:1evlue:XhyDA7Z6e7nTOD0jpIZH_lB8_LQ:1evlue:TJV81AtFxFiDdUm2HYYgIQv6NKs'
+SIGNATURE = 'eyJ1aWQiOjU0MzJ9:1ewX1j:L_ZB9w4KIamcHP6L9vr9I58GYmY'
+COMPROMISED_SIGNATURE = 'eyJ1aWQiOjU0MzJ9:1ewX56:BR50grR1AyQTR7_3NYw_ceXMdow'
 
 
 @pytest.fixture
@@ -15,6 +15,7 @@ def settings_single_signature__sign(settings):
         'django_secure_signature.middleware.SignMiddleware',
     ]
     settings.DJANGO_SECURE_SIGNATURE = [{
+        'HEADER': 'X-Data-Secure-Signed',
         'SALT': 'salt',
         'SECRET': 'secret',
         'DATA_GENERATOR': DATA
@@ -29,6 +30,7 @@ def settings_single_signature__unsign(settings):
         'django_secure_signature.middleware.UnsignMiddleware',
     ]
     settings.DJANGO_SECURE_SIGNATURE = [{
+        'HEADER': 'X-Unsign-Only',
         'SALT': 'salt',
         'SECRET': 'secret',
         'DATA_GENERATOR': DATA
@@ -43,6 +45,7 @@ def settings_single_signature__unsign__with_max_age(settings):
         'django_secure_signature.middleware.UnsignMiddleware',
     ]
     settings.DJANGO_SECURE_SIGNATURE = [{
+        'HEADER': 'X-Signed-Perishable',
         'SALT': 'salt',
         'SECRET': 'secret',
         'DATA_GENERATOR': DATA,
@@ -68,7 +71,7 @@ def test_can_sign_data(client, settings_single_signature__sign):
 # noinspection PyUnusedLocal
 def test_can_confirm_data(client, settings_single_signature__unsign):
     url = reverse('index2')
-    response = client.get(url, HTTP_X_DATA_SECURE_SIGNED=SIGNATURE)
+    response = client.get(url, HTTP_X_UNSIGN_ONLY=SIGNATURE)
 
     assert response.status_code == 200
 
@@ -80,7 +83,7 @@ def test_can_confirm_data(client, settings_single_signature__unsign):
 # noinspection PyUnusedLocal
 def test_signature_does_not_match(client, settings_single_signature__unsign):
     url = reverse('index2')
-    response = client.get(url, HTTP_X_DATA_SECURE_SIGNED=COMPROMISED_SIGNATURE)
+    response = client.get(url, HTTP_X_UNSIGN_ONLY=COMPROMISED_SIGNATURE)
 
     assert response.status_code == 403
 
@@ -88,6 +91,6 @@ def test_signature_does_not_match(client, settings_single_signature__unsign):
 # noinspection PyUnusedLocal
 def test_signature_expired(client, settings_single_signature__unsign__with_max_age):
     url = reverse('index2')
-    response = client.get(url, HTTP_X_DATA_SECURE_SIGNED=SIGNATURE)
+    response = client.get(url, HTTP_X_SIGNED_PERISHABLE=SIGNATURE)
 
     assert response.status_code == 403
