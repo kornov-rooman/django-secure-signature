@@ -5,51 +5,48 @@ from .settings import settings
 
 
 class SignMiddleware:
+    request_attr = 'signed_headers'
+
     def __init__(self, get_response):
         self.get_response = get_response
 
-        self.secrets = {
-            'key': settings.SECRET,
-            'salt': settings.SALT,
-        }
-        self.signer = signing.TimestampSigner(**self.secrets)
-
     def __call__(self, request):
-        if settings.SHOULD_SIGN_DATA:
-            self.patch_request_with_signed_data(request)
-
+        self.patch_request_with_signed_data(request)
         response = self.get_response(request)
-
-        if settings.SHOULD_SIGN_DATA:
-            self.add_response_headers(request, response)
-
+        self.add_response_headers(request, response)
         return response
 
     def patch_request_with_signed_data(self, request):
-        data = settings.TARGET(request)
+        secure_signed_headers = {}
 
-        signed_data = signing.dumps(data, **self.secrets)
-        timestamped_signed_data = self.signer.sign(signed_data)
+        for signature_settings in settings:
+            data = signature_settings.get_data(request)
+            if data is None:
+                continue
 
-        setattr(request, 'signed_data', timestamped_signed_data)
+            secrets = {
+                'key': signature_settings.SECRET,
+                'salt': signature_settings.SALT,
+            }
 
-    @staticmethod
-    def add_response_headers(request, response):
-        signed_data = getattr(request, 'signed_data', None)
+            signature = signing.dumps(data, **secrets)
+            secure_signed_headers[signature_settings.HEADER] = signature
 
-        if signed_data is not None:
-            response[settings.HEADER] = signed_data
+        if secure_signed_headers:
+            setattr(request, self.request_attr, secure_signed_headers)
+
+    def add_response_headers(self, request, response):
+        secure_signed_headers = getattr(request, self.request_attr, None)
+
+        for header, signature in secure_signed_headers.items():
+            response[header] = signature
 
 
 class UnsignMiddleware:
+    request_attr = 'confirmed_data'
+
     def __init__(self, get_response):
         self.get_response = get_response
-
-        self.secrets = {
-            'key': settings.SECRET,
-            'salt': settings.SALT,
-        }
-        self.signer = signing.TimestampSigner(**self.secrets)
 
     def __call__(self, request):
         try:
@@ -61,11 +58,20 @@ class UnsignMiddleware:
         return self.get_response(request)
 
     def patch_request_with_confirmed_signed_data(self, request):
-        value = request.META.get(settings.META_FORMATTED_HEADER, None)
-        if value is None:
-            return
+        confirmed_data = []
 
-        signed_data = self.signer.unsign(value, max_age=settings.MAX_AGE)
-        confirmed_signed_data = signing.loads(signed_data, **self.secrets)
+        for signature_settings in settings:
+            signature = request.META.get(signature_settings.meta_formatted_header, None)
+            if signature is None:
+                continue
 
-        setattr(request, 'confirmed_signed_data', confirmed_signed_data)
+            secrets = {
+                'key': signature_settings.SECRET,
+                'salt': signature_settings.SALT,
+            }
+
+            data = signing.loads(signature, **secrets, max_age=signature_settings.MAX_AGE)
+            confirmed_data.append(data)
+
+        if confirmed_data:
+            setattr(request, self.request_attr, confirmed_data)
