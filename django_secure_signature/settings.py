@@ -1,29 +1,29 @@
 """
 DJANGO_SECURE_SIGNATURE = [
     {
-        'TARGET': 'http://example.com',
+        'SENDER': 'http://first.example.com',
 
         'HEADER': 'X-Custom-Signed-Header',
 
         'SECRET': 'secret-1',
         'SALT': 'salt-1',
+        'DATA_GENERATOR': lambda request, *args, **kwargs: {'test': 'test'}
 
-        'DATA': lambda request, *args, **kwargs: {'test': 'test'}
         'MAX_AGE': timedelta(seconds=60),
     },
     {
-        'ORIGINATOR': 'http://first.example.com',
+        'RECIPIENT': 'http://second.example.com',
 
         'SECRET': 'secret-2',
         'SALT': 'salt-2',
 
-        'DATA': {'test': 'test'}
+        'DATA_GENERATOR': {'test': 'test'}
     },
     {
         'SECRET': 'secret-3',
         'SALT': 'salt-3',
 
-        'DATA': 'common.utils.get_data_for_signature'
+        'DATA_GENERATOR': 'common.utils.get_data_for_signature'
     },
 ]
 """
