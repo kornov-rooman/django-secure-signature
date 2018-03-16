@@ -10,8 +10,7 @@ def import_from_string(val: str, setting_name: str):
         return getattr(module, class_name)
 
     except (ImportError, AttributeError) as e:
-        msg = f'Unable to import {val} for {setting_name}. {e.__class__.__name__}: {e}.'
-
+        msg = 'Unable to import {} for {}. {}: {}.'.format(val, setting_name, e.__class__.__name__, e)
         raise ImportError(msg)
 
 
@@ -19,4 +18,4 @@ def transform_header_to_django_meta_format(header: str) -> str:
     header = header.upper()
     header = header.replace('-', '_')
 
-    return f'HTTP_{header}'
+    return 'HTTP_{}'.format(header)

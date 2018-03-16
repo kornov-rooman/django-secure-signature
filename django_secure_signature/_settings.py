@@ -38,7 +38,7 @@ class ItemSettings:
 
     def __getattr__(self, attr: str) -> t.Any:
         if attr not in self.available_settings:
-            raise AttributeError(f'Invalid setting: {attr}')
+            raise AttributeError('Invalid setting: {}'.format(attr))
 
         if attr in self.calculating:
             val = self.calculate(attr)
@@ -85,7 +85,7 @@ class Settings:  # iterable settings
             app_settings = getattr(dj_settings, 'DJANGO_SECURE_SIGNATURE', [])
 
         if not (isinstance(app_settings, list) or isinstance(app_settings, tuple)):
-            msg = f'DJANGO_SECURE_SIGNATURE must be either a list or tuple, not {type(app_settings)}!'
+            msg = 'DJANGO_SECURE_SIGNATURE must be either a list or tuple, not {}!'.format(type(app_settings))
             raise ImproperlyConfigured(msg)
 
         self._settings = [ItemSettings(item) for item in app_settings]

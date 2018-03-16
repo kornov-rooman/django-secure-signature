@@ -1,5 +1,13 @@
-.idea
-
 __pycache__
-*.pyc
+
+.idea
 .pytest_cache
+.tox
+
+*~
+*.egg-info
+*.pyc
+*.db
+
+build
+dist
