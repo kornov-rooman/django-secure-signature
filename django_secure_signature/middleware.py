@@ -55,7 +55,7 @@ class UnsignMiddleware:
         try:
             self.patch_request_with_confirmed_signed_data(request)
         except (signing.SignatureExpired, signing.BadSignature) as e:
-            msg = f'{e.__class__.__name__}: "{e}"'
+            msg = '{}: "{}"'.format(e.__class__.__name__, e)
             return HttpResponseForbidden(msg)
 
         return self.get_response(request)
@@ -73,7 +73,7 @@ class UnsignMiddleware:
                 'salt': signature_settings.SALT,
             }
 
-            data = signing.loads(signature, **secrets, max_age=signature_settings.MAX_AGE)
+            data = signing.loads(signature, max_age=signature_settings.MAX_AGE, **secrets)
             confirmed_data.append(data)
 
         if confirmed_data:

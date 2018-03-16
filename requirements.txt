@@ -1,6 +1,4 @@
-django>=1.10
-
-bumpversion
-
-pytest
-pytest-django
+-r requirements/dev-pkgs.txt
+-r requirements/test-pkgs.txt
+-r requirements/packaging-pkgs.txt
+-r requirements/optional-pkgs.txt
